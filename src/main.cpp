@@ -10,8 +10,10 @@ const long  gmtOffset_sec = -6 * 60 * 60;
 const int   daylightOffset_sec = 3600;
 const int EVENT_LIMIT = 5;
 int event_count;
+int array_count;
 int curr_level;
 int prev_level;
+int pump_prev_level;
 
 char timeVar[128];
 char timeStringBuff[50]; //50 chars should be enough
@@ -20,7 +22,7 @@ String levels[20] = {"LOW","ELEVATED","HIGH","CRITICAL","EMERGENCY"};
 
 struct event_rec
 {
-  int event_type;
+  int event_type; //0=Water_level, 1=Pump_status
   char timeStringBuff[50];
   char description[100];
   int pre_event_level;
@@ -29,7 +31,7 @@ struct event_rec
 
 event_rec events[EVENT_LIMIT];
 
-void printLocalTime(boolean doPrint)
+void getLocalTime(boolean doPrint)
 {
   struct tm timeinfo;
   if(!getLocalTime(&timeinfo)){
@@ -76,6 +78,9 @@ int curMonVal;
 unsigned long prevMillis = 0;
 unsigned long currMillis;
 unsigned long pumpStartMillis;
+unsigned long printStartMillis;
+unsigned long nextPrintMillis;
+
 unsigned long nextPumpCheck;
 unsigned interval = 300;
 int prevPumpState = 0;
@@ -109,7 +114,7 @@ String convertMillis(unsigned long pMillis) {
   return timeString;   
 }
 
-int printWaterLevel(boolean doPrint) {
+int getWaterLevel(boolean doPrint) {
   for(int i = 3;i>-1;i--) {
     switch_val = digitalRead(switches[i]);
     if(!switch_val) {
@@ -126,6 +131,13 @@ int printWaterLevel(boolean doPrint) {
     Serial.print(levels[0]);
   }
   return 0;
+}
+
+void printHistory() {
+  for(int ii=event_count; ii > max(event_count - EVENT_LIMIT, -1);ii--) {
+    array_count = ii % EVENT_LIMIT;
+    Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
+  }
 }
 
 void setup() {
@@ -170,7 +182,7 @@ void setup() {
   
   //init and get the time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  printLocalTime(true);
+  getLocalTime(true);
   Serial.print("\n");
 
   //disconnect WiFi as it's no longer needed
@@ -190,8 +202,6 @@ void setup() {
 
 /**/
     for(int i = 0;i<4;i++) {
-        digitalWrite(green_led[i], HIGH);
-        delay(125);
         digitalWrite(green_led[i], LOW);
         delay(125);
 
@@ -234,11 +244,10 @@ void setup() {
 		digitalWrite(HB_led, LOW);
 	}
 
-  printLocalTime(false);
-//  Serial.print(": ");
-  curr_level = printWaterLevel(false);
+  getLocalTime(false);
+  curr_level = getWaterLevel(false);
   prev_level = curr_level;
-//  Serial.print("\n");
+  events[0].event_type = 0;
   for(int ii=0;ii<sizeof(timeStringBuff);ii++) {
     events[0].timeStringBuff[ii] = timeStringBuff[ii];
   }
@@ -247,33 +256,45 @@ void setup() {
   events[0].pre_event_level = prev_level;
   events[0].post_event_level = curr_level;
   Serial.println((String) events[0].timeStringBuff + "|" + events[0].description + "|" + levels[events[0].pre_event_level] + "|" + levels[events[0].post_event_level]);
-//  Serial.println((String) events[0].description);
+  printStartMillis = millis();
+  nextPrintMillis = printStartMillis + 3 * 60 * 1000;
 
 }
 
 void loop() {
-
-
     for(int i = 0;i<4;i++) {
         switch_val = digitalRead(switches[i]);
         if(!switch_val) {
-        digitalWrite(green_led[i], LOW);
-        delay(20);
-        digitalWrite(red_led[i], HIGH);
+          digitalWrite(green_led[i], LOW);
+          delay(20);
+          digitalWrite(red_led[i], HIGH);
         } else {
-        digitalWrite(red_led[i], LOW);
-        delay(20);
-        digitalWrite(green_led[i], HIGH);
+          digitalWrite(red_led[i], LOW);
+          delay(20);
+          digitalWrite(green_led[i], HIGH);
         }
         if(switch_val!=last_switch_val[i]) {
-            printLocalTime(true);
-            Serial.print(": ");
-            curr_level = printWaterLevel(true);
-            Serial.print("\n");
-//            Serial.print(": Switch[");
-//            Serial.print(i);
-//            Serial.print("] is ");
-//            Serial.println(switch_val?"HIGH":"LOW");
+            getLocalTime(false);
+            prev_level = curr_level;
+            curr_level = getWaterLevel(false);
+            if(!currPumpState) {
+              event_count++;
+              array_count = event_count % EVENT_LIMIT;
+              Serial.print("event_count = ");
+              Serial.println(event_count);
+              Serial.print("array_count = ");
+              Serial.println(array_count);
+              events[array_count].event_type = 0;
+              for(int ii=0;ii<sizeof(timeStringBuff);ii++) {
+                events[array_count].timeStringBuff[ii] = timeStringBuff[ii];
+              }
+              String description = "Water level is: " + levels[curr_level];
+              description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
+              events[array_count].pre_event_level = prev_level;
+              events[array_count].post_event_level = curr_level;
+              Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
+
+            }
         }
         last_switch_val[i] = switch_val;
 
@@ -284,32 +305,55 @@ void loop() {
 // currPumpState = (curMonVal > pumpOnLevel?1:0);
  if(currPumpState != prevPumpState) {
      prevPumpState = currPumpState;
-     printLocalTime(true);
+     getLocalTime(true);
      Serial.print(": Sump Pump is ");
      Serial.print(currPumpState?"ON":"OFF");
     Serial.print(" (");
     Serial.print(curMonVal);
     Serial.println(")");
     if(currPumpState) {
-        digitalWrite(HB_led, HIGH);
-		pumpStartMillis = millis();
-		nextPumpCheck = getNextPumpCheck(pumpStartMillis, pumpStartMillis);
+      pump_prev_level = curr_level;
+      digitalWrite(HB_led, HIGH);
+      pumpStartMillis = millis();
+      nextPumpCheck = getNextPumpCheck(pumpStartMillis, pumpStartMillis);
     } else {
-		digitalWrite(HB_led, LOW);
-		currMillis = millis();
-		Serial.print("Sump Pump ran for ");
-		Serial.print(convertMillis(currMillis - pumpStartMillis));
-		Serial.println(" (h:m:s).");
+      event_count++;
+      array_count = event_count % EVENT_LIMIT;
+      Serial.print("event_count = ");
+      Serial.println(event_count);
+      Serial.print("array_count = ");
+      Serial.println(array_count);
+      digitalWrite(HB_led, LOW);
+      curr_level = getWaterLevel(false);
+      currMillis = millis();      
+//      Serial.print("Sump Pump ran for ");
+//      Serial.print(convertMillis(currMillis - pumpStartMillis));
+      String description = "Sump Pump ran for " + convertMillis(currMillis - pumpStartMillis);
+      description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
+      events[array_count].pre_event_level = pump_prev_level;
+      events[array_count].post_event_level = curr_level;
+      getLocalTime(false);
+      events[array_count].event_type = 1;
+      for(int ii=0;ii<sizeof(timeStringBuff);ii++) {
+        events[array_count].timeStringBuff[ii] = timeStringBuff[ii];
+      }
+      Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
+//      Serial.println(" (h:m:s).");
     }
  } else {
 	currMillis = millis();
 	if(currPumpState && currMillis > nextPumpCheck) { 
-      printLocalTime(true);
+      getLocalTime(true);
       Serial.print(": *** WARNING *** Sump Pump has been running for ");
       Serial.print((currMillis - pumpStartMillis) / (60 * 1000));
       Serial.println(" minutes.");
 	  nextPumpCheck = getNextPumpCheck(pumpStartMillis, nextPumpCheck);
 	}
+  if(currMillis >  nextPrintMillis) {
+    Serial.println("Printing History...");
+    printHistory();
+    nextPrintMillis = currMillis + 3 * 60 * 1000;
+  }
  }
  
 
