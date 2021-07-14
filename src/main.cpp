@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <time.h>
 
+#define DEBUG
 const char* ssid       = "BoigieNetx";
 const char* password   = "F1r3Engin3Sauc3";
 
@@ -141,10 +142,10 @@ void printHistory() {
 void addEvent(int pEventType) {
   event_count++;
   array_count = event_count % EVENT_LIMIT;
-  Serial.print("event_count = ");
-  Serial.println(event_count);
-  Serial.print("array_count = ");
-  Serial.println(array_count);
+//  Serial.print("event_count = ");
+//  Serial.println(event_count);
+//  Serial.print("array_count = ");
+//  Serial.println(array_count);
   events[array_count].event_type = pEventType;
 
   getLocalTime(false);
@@ -256,13 +257,15 @@ void setup() {
     }
     digitalWrite(HB_led, LOW);
 
-	curMonVal = analogRead(curMonPin);
+    curMonVal = analogRead(curMonPin);
     currPumpState = (curMonVal > pumpOnLevel?1:0);
-//	currPumpState = (curMonVal > pumpOnLevel?1:0);
+
+#ifdef DEBUG	
 	Serial.print("Sump Pump is ");
 	Serial.print(currPumpState?"ON":"OFF");
-    Serial.print(" (" + curMonVal);
+    	Serial.print(" (" + curMonVal);
 	Serial.println(")");
+#endif	
 	prevPumpState = currPumpState;
 	if(currPumpState) {
 		digitalWrite(HB_led, HIGH);
@@ -283,7 +286,9 @@ void setup() {
   description.toCharArray(events[0].description, sizeof(events[0].description));
   events[0].pre_event_level = prev_level;
   events[0].post_event_level = curr_level;
+#ifdef DEBUG	
   Serial.println((String) events[0].timeStringBuff + "|" + events[0].description);
+#endif	
   printStartMillis = millis();
   nextPrintMillis = printStartMillis + 3 * 60 * 1000;
 
@@ -319,11 +324,13 @@ void loop() {
  if(currPumpState != prevPumpState) {
      prevPumpState = currPumpState;
      getLocalTime(true);
+#ifdef DEBUG		 
      Serial.print(": Sump Pump is ");
      Serial.print(currPumpState?"ON":"OFF");
     Serial.print(" (");
     Serial.print(curMonVal);
     Serial.println(")");
+#endif	
     if(currPumpState) {
       pump_prev_level = curr_level;
       digitalWrite(HB_led, HIGH);
@@ -339,14 +346,18 @@ void loop() {
 	currMillis = millis();
 	if(currPumpState && currMillis > nextPumpCheck) { 
       getLocalTime(true);
+#ifdef DEBUG		 
       Serial.print(": *** WARNING *** Sump Pump has been running for ");
       Serial.print((currMillis - pumpStartMillis) / (60 * 1000));
       Serial.println(" minutes.");
-	  nextPumpCheck = getNextPumpCheck(pumpStartMillis, nextPumpCheck);
-	}
+#endif	
+	nextPumpCheck = getNextPumpCheck(pumpStartMillis, nextPumpCheck);
+  }
   if(currMillis >  nextPrintMillis) {
+#ifdef DEBUG		 
     Serial.println("Printing History...");
     printHistory();
+#endif	
     nextPrintMillis = currMillis + 3 * 60 * 1000;
   }
  }
