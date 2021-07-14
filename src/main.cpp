@@ -164,7 +164,7 @@ void addEvent(int pEventType) {
 	  events[array_count].pre_event_level = prev_level;
 	  String description = "Water level is: " + levels[events[array_count].post_event_level] + " (from " + levels[events[array_count].pre_event_level] + ")";
 	  description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
-	  Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
+	  Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description);
   }
 }
 
@@ -283,7 +283,7 @@ void setup() {
   description.toCharArray(events[0].description, sizeof(events[0].description));
   events[0].pre_event_level = prev_level;
   events[0].post_event_level = curr_level;
-  Serial.println((String) events[0].timeStringBuff + "|" + events[0].description + "|" + levels[events[0].pre_event_level] + "|" + levels[events[0].post_event_level]);
+  Serial.println((String) events[0].timeStringBuff + "|" + events[0].description);
   printStartMillis = millis();
   nextPrintMillis = printStartMillis + 3 * 60 * 1000;
 
