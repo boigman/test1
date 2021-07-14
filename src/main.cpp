@@ -16,14 +16,14 @@ int prev_level;
 int pump_prev_level;
 
 char timeVar[128];
-char timeStringBuff[50]; //50 chars should be enough
+char timeStringBuff[72]; //72 chars should be enough
 
 String levels[20] = {"LOW","ELEVATED","HIGH","CRITICAL","EMERGENCY"};
 
 struct event_rec
 {
   int event_type; //0=Water_level, 1=Pump_status
-  char timeStringBuff[50];
+  char timeStringBuff[72];
   char description[100];
   int pre_event_level;
   int post_event_level;
@@ -64,8 +64,6 @@ void showTime(tm localTime) {
   if (localTime.tm_wday == 0)   Serial.println(7);
   else Serial.println(localTime.tm_wday);
 }
-
-
 
 int red_led[4];
 int green_led[4];
@@ -137,6 +135,36 @@ void printHistory() {
   for(int ii=event_count; ii > max(event_count - EVENT_LIMIT, -1);ii--) {
     array_count = ii % EVENT_LIMIT;
     Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
+  }
+}
+
+void addEvent(int pEventType) {
+  event_count++;
+  array_count = event_count % EVENT_LIMIT;
+  Serial.print("event_count = ");
+  Serial.println(event_count);
+  Serial.print("array_count = ");
+  Serial.println(array_count);
+  events[array_count].event_type = pEventType;
+
+  getLocalTime(false);
+  for(int ii=0;ii<sizeof(timeStringBuff);ii++) {
+	events[array_count].timeStringBuff[ii] = timeStringBuff[ii];
+  }
+  events[array_count].post_event_level = curr_level;
+
+  if(pEventType) {	// Pump event
+      events[array_count].pre_event_level = pump_prev_level;
+      String description = "Sump Pump ran for " + convertMillis(currMillis - pumpStartMillis + 
+		" (Water Level " + levels[events[array_count].pre_event_level] + 
+		" to " + levels[events[array_count].post_event_level] + ")");
+      description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
+      Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description);
+  } else {	// Water level event
+	  events[array_count].pre_event_level = prev_level;
+	  String description = "Water level is: " + levels[events[array_count].post_event_level] + " (from " + levels[events[array_count].pre_event_level] + ")";
+	  description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
+	  Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
   }
 }
 
@@ -278,22 +306,7 @@ void loop() {
             prev_level = curr_level;
             curr_level = getWaterLevel(false);
             if(!currPumpState) {
-              event_count++;
-              array_count = event_count % EVENT_LIMIT;
-              Serial.print("event_count = ");
-              Serial.println(event_count);
-              Serial.print("array_count = ");
-              Serial.println(array_count);
-              events[array_count].event_type = 0;
-              for(int ii=0;ii<sizeof(timeStringBuff);ii++) {
-                events[array_count].timeStringBuff[ii] = timeStringBuff[ii];
-              }
-              String description = "Water level is: " + levels[curr_level];
-              description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
-              events[array_count].pre_event_level = prev_level;
-              events[array_count].post_event_level = curr_level;
-              Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
-
+			  addEvent(0);
             }
         }
         last_switch_val[i] = switch_val;
@@ -317,28 +330,10 @@ void loop() {
       pumpStartMillis = millis();
       nextPumpCheck = getNextPumpCheck(pumpStartMillis, pumpStartMillis);
     } else {
-      event_count++;
-      array_count = event_count % EVENT_LIMIT;
-      Serial.print("event_count = ");
-      Serial.println(event_count);
-      Serial.print("array_count = ");
-      Serial.println(array_count);
       digitalWrite(HB_led, LOW);
       curr_level = getWaterLevel(false);
       currMillis = millis();      
-//      Serial.print("Sump Pump ran for ");
-//      Serial.print(convertMillis(currMillis - pumpStartMillis));
-      String description = "Sump Pump ran for " + convertMillis(currMillis - pumpStartMillis);
-      description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
-      events[array_count].pre_event_level = pump_prev_level;
-      events[array_count].post_event_level = curr_level;
-      getLocalTime(false);
-      events[array_count].event_type = 1;
-      for(int ii=0;ii<sizeof(timeStringBuff);ii++) {
-        events[array_count].timeStringBuff[ii] = timeStringBuff[ii];
-      }
-      Serial.println((String) events[array_count].timeStringBuff + "|" + events[array_count].description + "|" + levels[events[array_count].pre_event_level] + "|" + levels[events[array_count].post_event_level]);
-//      Serial.println(" (h:m:s).");
+	  addEvent(1);
     }
  } else {
 	currMillis = millis();
