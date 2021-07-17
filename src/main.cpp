@@ -1,10 +1,13 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <time.h>
+#include <WebServer.h>
 
 #define DEBUG
 const char* ssid       = "BoigieNetx";
 const char* password   = "F1r3Engin3Sauc3";
+
+WebServer server(80);
 
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = -6 * 60 * 60;
@@ -69,7 +72,7 @@ String SendHTML(int pCurrPumpState,int pCurrLevel){
     {ptr +="<p>Sump Pump is: ON</p>\n";}
   else
     {ptr +="<p>Sump Pump is: OFF</p>\n";}
-  ptr +="<p>Water Level is: " + levels[pCurrLevel] + "</p>\n";}
+  ptr +="<p>Water Level is: " + levels[pCurrLevel] + "</p>\n";
   return ptr;
 }
 
@@ -96,7 +99,7 @@ int switches[4];
 int switch_val;
 int last_switch_val[4];
 int HB_led = 19;
-const int curMonPin = 25;
+const int curMonPin = 33;
 int curMonVal;
 unsigned long prevMillis = 0;
 unsigned long currMillis;
@@ -240,8 +243,8 @@ void setup() {
   Serial.print("\n");
 
   //disconnect WiFi as it's no longer needed
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);  
+//  WiFi.disconnect(true);
+//  WiFi.mode(WIFI_OFF);  
 
     Serial.println("Sump Pump Monitor");
     for(int i = 0;i<4;i++) {
