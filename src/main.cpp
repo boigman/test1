@@ -53,7 +53,7 @@ void getLocalTime(boolean doPrint)
 String SendHTML(int pCurrPumpState,int pCurrLevel){
   String ptr = "<!DOCTYPE html> <html>\n";
   ptr +="<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\n";
-  ptr +="<title>LED Control</title>\n";
+  ptr +="<title>Sump Pump Monitor</title>\n";
   ptr +="<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}\n";
   ptr +="body{margin-top: 50px;} h1 {color: #444444;margin: 50px auto 30px;} h3 {color: #444444;margin-bottom: 50px;}\n";
   ptr +=".button {display: block;width: 80px;background-color: #3498db;border: none;color: white;padding: 13px 30px;text-decoration: none;font-size: 25px;margin: 0px auto 35px;cursor: pointer;border-radius: 4px;}\n";
@@ -61,11 +61,15 @@ String SendHTML(int pCurrPumpState,int pCurrLevel){
   ptr +=".button-on:active {background-color: #2980b9;}\n";
   ptr +=".button-off {background-color: #34495e;}\n";
   ptr +=".button-off:active {background-color: #2c3e50;}\n";
+  ptr +=".center {\n";
+  ptr +="margin-left: auto;\n";
+  ptr +="margin-right: auto;\n";
+  ptr +="}\n";
   ptr +="p {font-size: 14px;color: #888;margin-bottom: 10px;}\n";
   ptr +="</style>\n";
   ptr +="</head>\n";
   ptr +="<body>\n";
-  ptr +="<h1>ESP32 Web Server</h1>\n";
+  ptr +="<h1>Sump Pump Monitor</h1>\n";
     ptr +="<h3>Using Station(STA) Mode</h3>\n";
   
   if(pCurrPumpState)
@@ -73,6 +77,35 @@ String SendHTML(int pCurrPumpState,int pCurrLevel){
   else
     {ptr +="<p>Sump Pump is: OFF</p>\n";}
   ptr +="<p>Water Level is: " + levels[pCurrLevel] + "</p>\n";
+
+  ptr +="<p><table class='center'><tr><th>Date/Time</th><th>Event</th></tr>";
+  for(int ii=event_count; ii > max(event_count - EVENT_LIMIT, -1);ii--) {
+    array_count = ii % EVENT_LIMIT;
+    ptr +="<tr><td><span class=\"sensor\">";
+    ptr +=events[array_count].timeStringBuff;
+    ptr +="</span></td><td><span class=\"sensor\">";
+    ptr +=events[array_count].description;
+    ptr +="</td></tr>"; 
+  }  
+/* 
+  ptr +="<tr><td>Temperature</td><td><span class=\"sensor\">";
+  ptr +="24";
+  ptr +=" &deg;C</span></td></tr>"; 
+  ptr +="<tr><td>Humidity</td><td><span class=\"sensor\">";
+  ptr +="75";
+  ptr +=" %</span></td></tr>"; 
+  ptr +="<tr><td>Atmos Pressure</td><td><span class=\"sensor\">";
+  ptr +="1.05";
+  ptr +=" mbar</span></td></tr>";
+  ptr +=" </span></td></tr>"; 
+  ptr +="<tr><td>Brightness</td><td><span class=\"sensor\">";
+  ptr +="75";
+  ptr +=" lux</span></td></tr>"; 
+  ptr +="<tr><td>Sensor State?</td><td><span class=\"sensor\">";
+  ptr +="OFF";
+  ptr +=" </span></td></tr>";
+  ptr +="</table></p>\n";
+*/
   return ptr;
 }
 
@@ -125,6 +158,7 @@ unsigned long getNextPumpCheck(unsigned long pStart, unsigned long pNextCheck) {
 	if (interval > twoMinInterval) return pNextCheck + 8 * 60 * 1000;
 	return pStart + 2 * 60 * 1000;
 }	
+
 String convertMillis(unsigned long pMillis) {
   char timeString[20];
   unsigned long currentMillis = pMillis;
@@ -194,6 +228,13 @@ void addEvent(int pEventType) {
 	  description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
 	  Serial.println((String) events[array_count].timeStringBuff + ": " + events[array_count].description);
   }
+  server.send(200, "text/html", SendHTML(currPumpState,curr_level)); 
+}
+
+void handle_OnConnect() {
+
+  Serial.println("GPIO4 Status: OFF | GPIO5 Status: OFF");
+  server.send(200, "text/html", SendHTML(currPumpState,curr_level)); 
 }
 
 void setup() {
@@ -206,7 +247,7 @@ void setup() {
     pinMode (5, OUTPUT);
     pinMode (18, OUTPUT);
     pinMode (HB_led, OUTPUT);
-    pinMode(35, INPUT_PULLDOWN);
+    pinMode(25, INPUT_PULLDOWN);
     pinMode(34, INPUT_PULLDOWN);
     pinMode(39, INPUT_PULLDOWN);
     pinMode(36, INPUT_PULLDOWN);
@@ -218,7 +259,7 @@ void setup() {
     red_led[2] = 17;
     green_led[3] = 5;
     red_led[3] = 18;
-    switches[0] = 35;
+    switches[0] = 25;
     switches[1] = 34;
     switches[2] = 39;
     switches[3] = 36;
@@ -320,6 +361,10 @@ void setup() {
   printStartMillis = millis();
   nextPrintMillis = printStartMillis + 3 * 60 * 1000;
 
+  server.on("/", handle_OnConnect);
+
+  server.begin();
+  Serial.println("HTTP server started"); 
 }
 
 void loop() {
