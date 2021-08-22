@@ -12,7 +12,7 @@ WebServer server(80);
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = -6 * 60 * 60;
 const int   daylightOffset_sec = 3600;
-const int EVENT_LIMIT = 5;
+const int EVENT_LIMIT = 10;
 int event_count;
 int array_count;
 int curr_level;
