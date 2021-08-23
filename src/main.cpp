@@ -2,10 +2,11 @@
 #include <WiFi.h>
 #include <time.h>
 #include <WebServer.h>
+#include "config.h"
 
 #define DEBUG
-const char* ssid       = "BoigieNetx";
-const char* password   = "F1r3Engin3Sauc3";
+const char* ssid       = WIFI_SSID;
+const char* password   = WIFI_PASSWORD;
 
 WebServer server(80);
 
