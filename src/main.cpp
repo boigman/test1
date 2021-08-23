@@ -436,7 +436,8 @@ void setup() {
 
   server.on("/", handle_OnConnect);
 
-  sendEmail("SumpPump Monitor Startup",(String) events[0].timeStringBuff + ": Sump Pump Monitor startup completed.");
+  sendEmail("SumpPump Monitor Startup",(String) events[0].timeStringBuff + ": Sump Pump Monitor startup completed." + 
+  "<br>URL: " + WiFi.localIP().toString().c_str());
 
   server.begin();
   Serial.println("HTTP server started"); 
