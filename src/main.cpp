@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <time.h>
 #include <WebServer.h>
+#include <ESP_Mail_Client.h>
 #include "config.h"
 
 #define DEBUG
@@ -140,6 +141,9 @@ unsigned long currMillis;
 unsigned long pumpStartMillis;
 unsigned long printStartMillis;
 unsigned long nextPrintMillis;
+/* Declare the session config data */
+ESP_Mail_Session session;
+
 
 unsigned long nextPumpCheck;
 unsigned interval = 300;
@@ -201,6 +205,8 @@ void printHistory() {
   }
 }
 
+void sendEmail(String pHeader, String pMessage);
+
 void addEvent(int pEventType) {
   event_count++;
   array_count = event_count % EVENT_LIMIT;
@@ -223,11 +229,13 @@ void addEvent(int pEventType) {
 		" to " + levels[events[array_count].post_event_level] + ")";
       description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
       Serial.println((String) events[array_count].timeStringBuff + ": " + events[array_count].description);
+      sendEmail("Pump Event", description);
   } else {	// Water level event
 	  events[array_count].pre_event_level = prev_level;
 	  String description = "Water level is: " + levels[events[array_count].post_event_level] + " (from " + levels[events[array_count].pre_event_level] + ")";
 	  description.toCharArray(events[array_count].description, sizeof(events[array_count].description));
 	  Serial.println((String) events[array_count].timeStringBuff + ": " + events[array_count].description);
+    sendEmail("Water Level Event", description);
   }
   server.send(200, "text/html", SendHTML(currPumpState,curr_level)); 
 }
@@ -237,6 +245,53 @@ void handle_OnConnect() {
   Serial.println("GPIO4 Status: OFF | GPIO5 Status: OFF");
   server.send(200, "text/html", SendHTML(currPumpState,curr_level)); 
 }
+
+/* The SMTP Session object used for Email sending */
+SMTPSession smtp;
+
+/* Callback function to get the Email sending status */
+void smtpCallback(SMTP_Status status);
+
+void sendEmail(String pHeader, String pMessage){
+
+  /* Declare the message class */
+  SMTP_Message message;
+
+  /* Set the message headers */
+  message.sender.name = "SumpPump Monitor";
+  message.sender.email = AUTHOR_EMAIL;
+  message.subject = pHeader.c_str();
+  message.addRecipient("Dave", RECIPIENT_EMAIL);
+
+  /*Send HTML message*/
+  String htmlMsg = "<div style=\"color:#2f4468;\"><h1>Sump Pump Monitor Message</h1><p>- " + pMessage + "</p></div>";
+  message.html.content = htmlMsg.c_str();
+  message.html.content = htmlMsg.c_str();
+  message.text.charSet = "us-ascii";
+  message.html.transfer_encoding = Content_Transfer_Encoding::enc_7bit;
+
+  /*
+  //Send raw text message
+  String textMsg = "Hello World! - Sent from ESP board";
+  message.text.content = textMsg.c_str();
+  message.text.charSet = "us-ascii";
+  message.text.transfer_encoding = Content_Transfer_Encoding::enc_7bit;
+  
+  message.priority = esp_mail_smtp_priority::esp_mail_smtp_priority_low;
+  message.response.notify = esp_mail_smtp_notify_success | esp_mail_smtp_notify_failure | esp_mail_smtp_notify_delay;*/
+
+  /* Set the custom message header */
+  //message.addHeader("Message-ID: <abcde.fghij@gmail.com>");
+
+  /* Connect to server with the session config */
+  if (!smtp.connect(&session))
+    return;
+
+  /* Start sending Email and close the session */
+  if (!MailClient.sendMail(&smtp, &message))
+    Serial.println("Error sending Email, " + smtp.errorReason());
+}
+
 
 void setup() {
     pinMode (15, OUTPUT);
@@ -278,7 +333,24 @@ void setup() {
   }
   Serial.println(" CONNECTED");
   Serial.print("Got IP: ");  Serial.println(WiFi.localIP());
-  
+
+  /** Enable the debug via Serial port
+   * none debug or 0
+   * basic debug or 1
+  */
+  smtp.debug(1);
+
+  /* Set the callback function to get the sending results */
+  smtp.callback(smtpCallback);
+
+
+  /* Set the session config */
+  session.server.host_name = SMTP_HOST;
+  session.server.port = SMTP_PORT;
+  session.login.email = AUTHOR_EMAIL;
+  session.login.password = AUTHOR_PASSWORD;
+  session.login.user_domain = "";
+
   //init and get the time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   getLocalTime(true);
@@ -364,6 +436,8 @@ void setup() {
 
   server.on("/", handle_OnConnect);
 
+  sendEmail("SumpPump Monitor Startup",(String) events[0].timeStringBuff + ": Sump Pump Monitor startup completed.");
+
   server.begin();
   Serial.println("HTTP server started"); 
 }
@@ -420,6 +494,12 @@ void loop() {
 	currMillis = millis();
 	if(currPumpState && currMillis > nextPumpCheck) { 
       getLocalTime(true);
+      String pumpMsg = ": *** WARNING *** Sump Pump has been running for " + convertMillis(currMillis - pumpStartMillis) + " minutes.";
+//      String description = "Sump Pump ran for " + convertMillis(currMillis - pumpStartMillis) + 
+//		" (Water Level " + levels[events[array_count].pre_event_level] + 
+//		" to " + levels[events[array_count].post_event_level] + ")";
+
+      sendEmail("*** Pump Warning ***",pumpMsg);
 #ifdef DEBUG		 
       Serial.print(": *** WARNING *** Sump Pump has been running for ");
       Serial.print((currMillis - pumpStartMillis) / (60 * 1000));
@@ -438,5 +518,33 @@ void loop() {
  }
  server.handleClient();
 
+}
 
+/* Callback function to get the Email sending status */
+void smtpCallback(SMTP_Status status){
+  /* Print the current status */
+  Serial.println(status.info());
+
+  /* Print the sending result */
+  if (status.success()){
+    Serial.println("----------------");
+    ESP_MAIL_PRINTF("Message sent success: %d\n", status.completedCount());
+    ESP_MAIL_PRINTF("Message sent failled: %d\n", status.failedCount());
+    Serial.println("----------------\n");
+    struct tm dt;
+
+    for (size_t i = 0; i < smtp.sendingResult.size(); i++){
+      /* Get the result item */
+      SMTP_Result result = smtp.sendingResult.getItem(i);
+      time_t ts = (time_t)result.timestamp;
+      localtime_r(&ts, &dt);
+
+      ESP_MAIL_PRINTF("Message No: %d\n", i + 1);
+      ESP_MAIL_PRINTF("Status: %s\n", result.completed ? "success" : "failed");
+      ESP_MAIL_PRINTF("Date/Time: %d/%d/%d %d:%d:%d\n", dt.tm_year + 1900, dt.tm_mon + 1, dt.tm_mday, dt.tm_hour, dt.tm_min, dt.tm_sec);
+      ESP_MAIL_PRINTF("Recipient: %s\n", result.recipients);
+      ESP_MAIL_PRINTF("Subject: %s\n", result.subject);
+    }
+    Serial.println("----------------\n");
+  }
 }
