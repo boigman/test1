@@ -242,7 +242,7 @@ void addEvent(int pEventType) {
 
 void handle_OnConnect() {
 
-  Serial.println("GPIO4 Status: OFF | GPIO5 Status: OFF");
+//  Serial.println("GPIO4 Status: OFF | GPIO5 Status: OFF");
   server.send(200, "text/html", SendHTML(currPumpState,curr_level)); 
 }
 
@@ -292,6 +292,41 @@ void sendEmail(String pHeader, String pMessage){
     Serial.println("Error sending Email, " + smtp.errorReason());
 }
 
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
+  unsigned long connMillis = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    if(millis() - connMillis > 120000) {
+      ESP.restart();
+    }
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
+}
+
+void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  Serial.println("Connected to AP successfully!");
+}
+
+void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
+  Serial.println("Disconnected from WiFi access point");
+  Serial.print("WiFi lost connection. Reason: ");
+  Serial.println(info.disconnected.reason);
+  Serial.println("Trying to Reconnect");
+//  WiFi.begin(ssid, password);
+  initWiFi();  
+}
+
+
 
 void setup() {
     pinMode (15, OUTPUT);
@@ -325,14 +360,20 @@ void setup() {
     Serial.begin(115200);
   
   //connect to WiFi
-  Serial.printf("Connecting to %s ", ssid);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
-  }
+  initWiFi();
+//  Serial.printf("Connecting to %s ", ssid);
+//  WiFi.begin(ssid, password);
+//  while (WiFi.status() != WL_CONNECTED) {
+//      delay(500);
+//      Serial.print(".");
+//  }
   Serial.println(" CONNECTED");
   Serial.print("Got IP: ");  Serial.println(WiFi.localIP());
+
+  WiFi.onEvent(WiFiStationConnected, SYSTEM_EVENT_STA_CONNECTED);
+  WiFi.onEvent(WiFiGotIP, SYSTEM_EVENT_STA_GOT_IP);
+  WiFi.onEvent(WiFiStationDisconnected, SYSTEM_EVENT_STA_DISCONNECTED);
+
 
   /** Enable the debug via Serial port
    * none debug or 0
@@ -511,8 +552,8 @@ void loop() {
   if(currMillis >  nextPrintMillis) {
 #ifdef DEBUG
     getLocalTime(true);		 
-    Serial.println(": Printing History...");
-    printHistory();
+//    Serial.println(": Printing History...");
+//    printHistory();
 #endif	
     nextPrintMillis = currMillis + 3 * 60 * 1000;
   }
@@ -530,7 +571,7 @@ void smtpCallback(SMTP_Status status){
   if (status.success()){
     Serial.println("----------------");
     ESP_MAIL_PRINTF("Message sent success: %d\n", status.completedCount());
-    ESP_MAIL_PRINTF("Message sent failled: %d\n", status.failedCount());
+    ESP_MAIL_PRINTF("Message sent failed: %d\n", status.failedCount());
     Serial.println("----------------\n");
     struct tm dt;
 
