@@ -361,12 +361,6 @@ void setup() {
   
   //connect to WiFi
   initWiFi();
-//  Serial.printf("Connecting to %s ", ssid);
-//  WiFi.begin(ssid, password);
-//  while (WiFi.status() != WL_CONNECTED) {
-//      delay(500);
-//      Serial.print(".");
-//  }
   Serial.println(" CONNECTED");
   Serial.print("Got IP: ");  Serial.println(WiFi.localIP());
 
@@ -414,6 +408,8 @@ void setup() {
 
 /**/
     for(int i = 0;i<4;i++) {
+        digitalWrite(green_led[i], HIGH);
+        delay(125);
         digitalWrite(green_led[i], LOW);
         delay(125);
 
@@ -529,8 +525,10 @@ void loop() {
     } else {
       digitalWrite(HB_led, LOW);
       curr_level = getWaterLevel(false);
-      currMillis = millis();      
-	  addEvent(1);
+      currMillis = millis();
+      if(currMillis - pumpStartMillis > 2000) {
+	      addEvent(1);
+      }      
     }
  } else {
 	currMillis = millis();
