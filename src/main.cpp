@@ -8,6 +8,16 @@
 #define DEBUG
 const char* ssid       = WIFI_SSID;
 const char* password   = WIFI_PASSWORD;
+#ifdef IP_ADDRESS
+//  const char* ip_address = IP_ADDRESS;
+  IPAddress ip_address(IP_ADDRESS);
+#endif
+
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 0, 0);
+IPAddress primaryDNS(8, 8, 8, 8);   //optional
+IPAddress secondaryDNS(8, 8, 4, 4); //optional
+
 
 WebServer server(80);
 
@@ -293,6 +303,15 @@ void sendEmail(String pHeader, String pMessage){
 }
 
 void initWiFi() {
+#ifdef IP_ADDRESS 
+  Serial.print("Found fixed IP Address: ");
+  Serial.println(ip_address);
+  if (!WiFi.config(ip_address, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }  
+  
+#endif 
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi ..");
